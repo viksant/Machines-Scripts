@@ -125,7 +125,7 @@ def BasicEnumeration():
                 color.message(r5.text)
 
 if __name__ == "__main__":
-    #MainRequest()
+    MainRequest()
     BasicEnumeration()
 
 
